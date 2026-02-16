@@ -1,0 +1,552 @@
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            AlsabbaghTelecomApp()
+        }
+    }
+}
+@file:OptIn(ExperimentalMaterial3Api::class)
+
+package com.alsabbagh.telecom.ui
+
+import androidx.compose.animation.AnimatedVisibility import androidx.compose.animation.core.tween import androidx.compose.animation.fadeIn import androidx.compose.animation.fadeOut import androidx.compose.foundation.BorderStroke import androidx.compose.foundation.background import androidx.compose.foundation.clickable import androidx.compose.foundation.layout.* import androidx.compose.foundation.lazy.LazyColumn import androidx.compose.foundation.lazy.items import androidx.compose.foundation.shape.CircleShape import androidx.compose.foundation.shape.RoundedCornerShape import androidx.compose.material.icons.Icons import androidx.compose.material.icons.filled.* import androidx.compose.material3.* import androidx.compose.runtime.* import androidx.compose.ui.Alignment import androidx.compose.ui.Modifier import androidx.compose.ui.draw.clip import androidx.compose.ui.graphics.Brush import androidx.compose.ui.graphics.Color import androidx.compose.ui.platform.LocalLayoutDirection import androidx.compose.ui.text.font.FontWeight import androidx.compose.ui.text.style.TextOverflow import androidx.compose.ui.unit.LayoutDirection import androidx.compose.ui.unit.dp import androidx.compose.ui.unit.sp
+
+/**
+
+RTL
+
+
+
+
+
+// --------------------------- // Models // ---------------------------
+
+enum class Carrier(val title: String) { MTN(”MTN”), SYRIATEL(”Syriatel”) }
+
+enum class TransferMode(val title: String) { USSD(”USSD”), SIM_SLOTS(”شرائح”), API(”API”) }
+
+data class QuickAction( val title: String, val subtitle: String, val icon: @Composable () -> Unit, val onClick: () -> Unit )
+
+data class TxItem( val id: String, val carrier: Carrier, val toNumber: String, val amount: Int, val status: String, val time: String )
+
+data class Customer( val id: String, val name: String, val phone: String, val creditLimit: Int, val balance: Int )
+
+// --------------------------- // Navigation (lightweight) // ---------------------------
+
+enum class Screen { Splash, Login, Home, Transfer, History, Customers, Settings, // Dual App ChooseRole, AgentHome, CustomerHome, CustomerWallet, CustomerProfile }
+
+// --------------------------- // Root // ---------------------------
+
+enum class UserRole { AGENT, CUSTOMER }
+
+@Composable fun AlsabbaghTelecomApp() { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { val colorScheme = lightColorScheme( primary = Color(0xFF1E3A8A), secondary = Color(0xFF0EA5E9), tertiary = Color(0xFF10B981), surface = Color(0xFFF8FAFC), background = Color(0xFFF8FAFC) )
+
+MaterialTheme(colorScheme = colorScheme, typography = Typography()) {
+        var screen by remember { mutableStateOf(Screen.Splash) }
+        var role by remember { mutableStateOf<UserRole?>(null) }
+
+        // demo shared state
+        val txHistory = remember {
+            mutableStateListOf(
+                TxItem(”1”, Carrier.MTN, “0944xxxxxx”, 5000, “ناجحة”, “اليوم 12:40”),
+                TxItem(”2”, Carrier.SYRIATEL, “0933xxxxxx”, 10000, “فشلت”, “أمس 19:10”),
+                TxItem(”3”, Carrier.MTN, “0948xxxxxx”, 2000, “ناجحة”, “أمس 10:22”),
+            )
+        }
+
+        val customers = remember {
+            mutableStateListOf(
+                Customer(”c1”, “أبو أحمد”, “0944xxxxxx”, 250000, 62000),
+                Customer(”c2”, “محمد الحسن”, “0933xxxxxx”, 150000, 0),
+                Customer(”c3”, “مؤسسة النور”, “0949xxxxxx”, 800000, 310000)
+            )
+        }
+
+        Surface(modifier = Modifier.fillMaxSize()) {
+            when (screen) {
+                Screen.Splash -> SplashScreen(onDone = { screen = Screen.Login })
+
+                Screen.Login -> LoginScreen(
+                    onLogin = {
+                        // بعد تسجيل الدخول: نختار الواجهة حسب الدور
+                        screen = Screen.ChooseRole
+                    }
+                )
+
+                Screen.ChooseRole -> ChooseRoleScreen(
+                    onPickAgent = {
+                        role = UserRole.AGENT
+                        screen = Screen.AgentHome
+                    },
+                    onPickCustomer = {
+                        role = UserRole.CUSTOMER
+                        screen = Screen.CustomerHome
+                    }
+                )
+
+                // ------------------
+                // Agent UI
+                // ------------------
+                Screen.AgentHome -> AgentAgentHomeScreen(
+                    onGoTransfer = { screen = Screen.Transfer },
+                    onGoHistory = { screen = Screen.History },
+                    onGoCustomers = { screen = Screen.Customers },
+                    onGoSettings = { screen = Screen.Settings }
+                )
+
+                Screen.Transfer -> TransferScreen(
+                    onBack = { screen = Screen.AgentHome },
+                    onTransferDone = { txHistory.add(0, it) }
+                )
+
+                Screen.History -> HistoryScreen(
+                    items = txHistory,
+                    onBack = { screen = Screen.AgentHome }
+                )
+
+                Screen.Customers -> CustomersScreen(
+                    customers = customers,
+                    onBack = { screen = Screen.AgentHome }
+                )
+
+                Screen.Settings -> SettingsScreen(
+                    onBack = {
+                        screen = if (role == UserRole.CUSTOMER) Screen.CustomerHome else Screen.AgentHome
+                    }
+                )
+
+                // ------------------
+                // Customer UI
+                // ------------------
+                Screen.CustomerHome -> CustomerHomeScreen(
+                    onGoWallet = { screen = Screen.CustomerWallet },
+                    onGoTransfer = { screen = Screen.Transfer },
+                    onGoHistory = { screen = Screen.History },
+                    onGoProfile = { screen = Screen.CustomerProfile },
+                    onGoSettings = { screen = Screen.Settings }
+                )
+
+                Screen.CustomerWallet -> CustomerWalletScreen(
+                    onBack = { screen = Screen.CustomerHome }
+                )
+
+                Screen.CustomerProfile -> CustomerProfileScreen(
+                    onBack = { screen = Screen.CustomerHome }
+                )
+
+                // fallback
+                else -> {
+                    // default
+                    AgentHomeScreen(
+                        onGoTransfer = { screen = Screen.Transfer },
+                        onGoHistory = { screen = Screen.History },
+                        onGoCustomers = { screen = Screen.Customers },
+                        onGoSettings = { screen = Screen.Settings }
+                    )
+                }
+            }
+        }
+    }
+}
+
+}
+
+// --------------------------- // Splash // ---------------------------
+
+@Composable private fun SplashScreen(onDone: () -> Unit) { LaunchedEffect(Unit) { kotlinx.coroutines.delay(1100) onDone() }
+
+val gradient = Brush.linearGradient(
+    listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary
+    )
+)
+
+Box(
+    modifier = Modifier
+        .fillMaxSize()
+        .background(gradient)
+        .padding(24.dp),
+    contentAlignment = Alignment.Center
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(88.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.White.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Wifi,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(42.dp)
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        Text(
+            text = “السباغ للاتصالات”,
+            color = Color.White,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 24.sp
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = “تحويل رصيد MTN و Syriatel”,
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = 14.sp
+        )
+
+        Spacer(Modifier.height(22.dp))
+
+        CircularProgressIndicator(color = Color.White)
+    }
+}
+
+}
+
+// --------------------------- // Login // ---------------------------
+
+@Composable private fun LoginScreen(onLogin: () -> Unit) { var phone by remember { mutableStateOf(””) } var pass by remember { mutableStateOf(””) } var showPass by remember { mutableStateOf(false) }
+
+Scaffold(
+    topBar = {
+        CenterAlignedTopAppBar(
+            title = { Text(”تسجيل الدخول”) }
+        )
+    }
+) { padding ->
+    Column(
+        modifier = Modifier
+            .padding(padding)
+            .padding(16.dp)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.Top
+    ) {
+        AppHeroCard(
+            title = “مرحباً بك”,
+            subtitle = “سجّل دخولك لإدارة التحويلات والسجل والعملاء”,
+            icon = Icons.Default.Lock
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        OutlinedTextField(
+            value = phone,
+            onValueChange = { phone = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(”رقم الموبايل”) },
+            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+            singleLine = true
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedTextField(
+            value = pass,
+            onValueChange = { pass = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(”كلمة المرور”) },
+            leadingIcon = { Icon(Icons.Default.Password, contentDescription = null) },
+            trailingIcon = {
+                IconButton(onClick = { showPass = !showPass }) {
+                    Icon(
+                        if (showPass) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = null
+                    )
+                }
+            },
+            visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
+            singleLine = true
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Button(
+            onClick = onLogin,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(”دخول”)
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedButton(
+            onClick = { /* TODO */ },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(”إنشاء حساب”)
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        Text(
+            text = “بالضغط على دخول أنت توافق على سياسة الاستخدام.”,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+}
+
+// --------------------------- // Agent Home (واجهة الوكيل) // ---------------------------
+
+@Composable private fun AgentHomeScreen( onGoTransfer: () -> Unit, onGoHistory: () -> Unit, onGoCustomers: () -> Unit, onGoSettings: () -> Unit ) { Scaffold( topBar = { TopAppBar( title = { Column { Text(”السباغ للاتصالات”, fontWeight = FontWeight.Bold) Text( “لوحة التحكم”, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant ) } }, actions = { IconButton(onClick = onGoSettings) { Icon(Icons.Default.Settings, contentDescription = null) } } ) } ) { padding -> val quickActions = remember(onGoTransfer, onGoHistory, onGoCustomers) { listOf( QuickAction( title = “تحويل رصيد”, subtitle = “MTN / Syriatel”, icon = { Icon(Icons.Default.Send, contentDescription = null) }, onClick = onGoTransfer ), QuickAction( title = “سجل العمليات”, subtitle = “بحث + فلترة”, icon = { Icon(Icons.Default.ReceiptLong, contentDescription = null) }, onClick = onGoHistory ), QuickAction( title = “العملاء”, subtitle = “حسابات وحدود”, icon = { Icon(Icons.Default.People, contentDescription = null) }, onClick = onGoCustomers ) ) }
+
+LazyColumn(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            BalanceCard(
+                agentName = “وكيل: جعفر”,
+                balanceSyp = 1_250_000,
+                todayCount = 18,
+                todayTotal = 165_000
+            )
+        }
+
+        item {
+            Text(
+                text = “اختصارات”,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        }
+
+        items(quickActions) { action ->
+            ActionTile(action)
+        }
+
+        item {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = “نصائح سريعة”,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        }
+
+        item {
+            InfoTipCard(
+                title = “تحقق من الرقم قبل التحويل”,
+                body = “يفضل نسخ الرقم أو اختياره من العملاء لتجنب الأخطاء.”
+            )
+        }
+
+        item {
+            InfoTipCard(
+                title = “اختيار وضع التحويل”,
+                body = “USSD أسرع غالباً، والشرائح مفيدة عند وجود أكثر من خط.”
+            )
+        }
+
+        item {
+            Spacer(Modifier.height(22.dp))
+        }
+    }
+}
+
+}
+
+// --------------------------- // Transfer // ---------------------------
+
+@Composable private fun TransferScreen( onBack: () -> Unit, onTransferDone: (TxItem) -> Unit ) { var carrier by remember { mutableStateOf(Carrier.MTN) } var mode by remember { mutableStateOf(TransferMode.USSD) } var toNumber by remember { mutableStateOf(””) } var amount by remember { mutableStateOf(””) }
+
+var isSubmitting by remember { mutableStateOf(false) }
+var showResult by remember { mutableStateOf(false) }
+var resultOk by remember { mutableStateOf(true) }
+
+Scaffold(
+    topBar = {
+        TopAppBar(
+            title = { Text(”تحويل رصيد”) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = null)
+                }
+            }
+        )
+    }
+) { padding ->
+    Column(
+        modifier = Modifier
+            .padding(padding)
+            .padding(16.dp)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        AppHeroCard(
+            title = “عملية تحويل جديدة”,
+            subtitle = “اختر الشبكة وأدخل الرقم والمبلغ ثم نفّذ التحويل”,
+            icon = Icons.Default.Send
+        )
+
+        CarrierSegmented(
+            selected = carrier,
+            onSelect = { carrier = it }
+        )
+
+        ModeChips(
+            selected = mode,
+            onSelect = { mode = it }
+        )
+
+        OutlinedTextField(
+            value = toNumber,
+            onValueChange = { toNumber = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(”رقم المستلم”) },
+            leadingIcon = { Icon(Icons.Default.SimCard, contentDescription = null) },
+            supportingText = { Text(”مثال: 09xxxxxxxx”) },
+            singleLine = true
+        )
+
+        OutlinedTextField(
+            value = amount,
+            onValueChange = { amount = it.filter { ch -> ch.isDigit() } },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(”المبلغ”) },
+            leadingIcon = { Icon(Icons.Default.Payments, contentDescription = null) },
+            supportingText = { Text(”بالليرة السورية”) },
+            singleLine = true
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        Button(
+            onClick = {
+                if (toNumber.length < 9 || amount.isBlank()) return@Button
+
+                isSubmitting = true
+                showResult = false
+
+                // Demo: simulate success/failure
+                val ok = (amount.toIntOrNull() ?: 0) % 2 == 0
+                resultOk = ok
+
+                // add history
+                val tx = TxItem(
+                    id = System.currentTimeMillis().toString(),
+                    carrier = carrier,
+                    toNumber = toNumber,
+                    amount = amount.toIntOrNull() ?: 0,
+                    status = if (ok) “ناجحة” else “فشلت”,
+                    time = “الآن”
+                )
+                onTransferDone(tx)
+
+                isSubmitting = false
+                showResult = true
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(18.dp),
+            enabled = !isSubmitting
+        ) {
+            if (isSubmitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(”جار التنفيذ...”)
+            } else {
+                Text(”تنفيذ التحويل”)
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showResult,
+            enter = fadeIn(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(160))
+        ) {
+            ResultCard(
+                ok = resultOk,
+                carrier = carrier,
+                toNumber = toNumber,
+                amount = amount
+            )
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        AssistCard(
+            onClick = { /* TODO */ },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.SupportAgent, contentDescription = null)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(”مشكلة في التحويل؟”, fontWeight = FontWeight.Bold)
+                    Text(
+                        “تواصل مع الدعم الفني أو راجع سجل العمليات”,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(Icons.Default.ChevronLeft, contentDescription = null)
+            }
+        }
+    }
+}
+
+}
+
+// --------------------------- // History // ---------------------------
+
+@Composable private fun HistoryScreen(items: List<TxItem>, onBack: () -> Unit) { var query by remember { mutableStateOf(””) } var filterCarrier by remember { mutableStateOf<Carrier?>(null) } var filterStatus by remember { mutableStateOf<String?>(null) }
+
+val filtered = remember(items, query, filterCarrier, filterStatus) {
+    items.filter { it2 ->
+        val qOk = query.isBlank() || it2.toNumber.contains(query) || it2.amount.toString().contains(query)
+        val cOk = filterCarrier == null || it2.carrier == filterCarrier
+        val sOk = filterStatus == null || it2.status == filterStatus
+        qOk && cOk && sOk
+    }
+}
+
+Scaffold(
+    topBar = {
+        TopAppBar(
+            title = { Text(”سجل العمليات”) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = null)
+                }
+            }
+        )
+    }
+) { padding ->
+    Column(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+           
